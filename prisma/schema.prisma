@@ -1,0 +1,255 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model Patient {
+  id              String         @id @default(uuid())
+  recordNumber    String         @unique // Folio / Expediente clínico
+  firstName       String
+  lastName        String
+  documentId      String?        // DNI / Cédula / CURP
+  birthDate       DateTime
+  gender          String         // MALE | FEMALE
+  phone           String?
+  email           String?
+  occupation      String?
+  city            String?
+  emergencyNotes  String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  consultations   Consultation[]
+  preferenceSurvey PatientPreferenceSurvey?
+}
+
+model PatientPreferenceSurvey {
+  id                String    @id @default(uuid())
+  patientId         String    @unique
+  token             String    @unique
+  expiresAt         DateTime?
+  status            String    @default("PENDING") // PENDING | COMPLETED
+  completedAt       DateTime?
+
+  // Bloque 1: Alergias e Intolerancias
+  allergiesJson     String?   // JSON array de alergias seleccionadas
+  otherAllergies    String?
+
+  // Bloque 2: Preferencias y Aversiones
+  favoriteFoods     String?   // Alimentos favoritos / indispensables
+  dislikedFoods     String?   // Alimentos que rechaza o no consume
+  dietType          String?   // OMNIVORE | VEGETARIAN | VEGAN | PESCETARIAN | OTHER
+
+  // Bloque 3: Hábitos y Logística
+  cookingHabits     String?   // Quién cocina, tiempo disponible
+  diningOut         String?   // Frecuencia de comer fuera
+  waterIntake       String?   // Vasos o litros al día
+  physicalActivity  String?   // Nivel de actividad física
+
+  // Bloque 4: Horarios
+  breakfastTime     String?
+  morningSnack      String?
+  lunchTime         String?
+  afternoonSnack    String?
+  dinnerTime        String?
+
+  // Notas
+  additionalNotes   String?
+
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  patient           Patient   @relation(fields: [patientId], references: [id], onDelete: Cascade)
+}
+
+
+model Consultation {
+  id                      String              @id @default(uuid())
+  patientId               String
+  consultationNumber      Int
+  date                    DateTime            @default(now())
+  reasonForVisit          String
+  nutritionalDiagnosisPES String?             // Problema, Etiología, Signos y Síntomas
+  clinicalEvolutionNotes  String?
+  nextAppointmentDate     DateTime?
+  createdAt               DateTime            @default(now())
+  updatedAt               DateTime            @updatedAt
+
+  patient                 Patient             @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  anthropometry           AnthropometryRecord?
+  anamnesis               AnamnesisRecord?
+  biochemical             BiochemicalRecord?
+  dietPlan                DietPlan?
+}
+
+model AnthropometryRecord {
+  id                  String       @id @default(uuid())
+  consultationId      String       @unique
+  date                DateTime     @default(now())
+  weightKg            Float
+  heightCm            Float
+  bmi                 Float
+  bmiClassification   String
+  idealWeightKg       Float?
+
+  // Circunferencias (cm)
+  waistCm             Float?
+  hipCm               Float?
+  armCm               Float?
+  calfCm              Float?
+  waistHipRatio       Float?
+  waistHeightRatio    Float?
+
+  // Pliegues cutáneos (mm)
+  tricepsFoldMm       Float?
+  subscapularFoldMm   Float?
+  bicepsFoldMm        Float?
+  suprailiacFoldMm    Float?
+  abdominalFoldMm     Float?
+  thighFoldMm         Float?
+  calfFoldMm          Float?
+
+  // Composición corporal calculada
+  bodyFatPercentage   Float?
+  fatMassKg           Float?
+  leanMassKg          Float?
+  muscleMassKg        Float?
+
+  // Bioimpedancia (opcional)
+  visceralFatLevel    Float?
+  waterPercentage     Float?
+
+  // Somatotipo
+  endomorphy          Float?
+  mesomorphy          Float?
+  ectomorphy          Float?
+  somatotypeClass     String?
+
+  consultation        Consultation @relation(fields: [consultationId], references: [id], onDelete: Cascade)
+}
+
+model AnamnesisRecord {
+  id                  String       @id @default(uuid())
+  consultationId      String       @unique
+  familyHistoryJson   String?
+  pathologicalJson    String?
+  allergiesJson       String?
+  lifestyleJson       String?
+  foodRecall24hJson   String?
+
+  consultation        Consultation @relation(fields: [consultationId], references: [id], onDelete: Cascade)
+}
+
+model BiochemicalRecord {
+  id                  String       @id @default(uuid())
+  consultationId      String       @unique
+  date                DateTime     @default(now())
+  fastingGlucose      Float?
+  glycatedHbA1c       Float?
+  totalCholesterol    Float?
+  hdlCholesterol      Float?
+  ldlCholesterol      Float?
+  triglycerides       Float?
+  uricAcid            Float?
+  creatinine          Float?
+  hemoglobin          Float?
+  alt                 Float?
+  ast                 Float?
+  clinicalNotes       String?
+
+  consultation        Consultation @relation(fields: [consultationId], references: [id], onDelete: Cascade)
+}
+
+model DietPlan {
+  id                  String       @id @default(uuid())
+  consultationId      String       @unique
+  title               String
+  goal                String
+  bmrKcal             Int
+  tdeeKcal            Int
+  targetCaloriesKcal  Int
+  proteinGrams        Float
+  carbsGrams          Float
+  fatGrams            Float
+  mealsJson           String
+  generalGuidelines   String?
+  supplementsNotes    String?
+
+  consultation        Consultation @relation(fields: [consultationId], references: [id], onDelete: Cascade)
+}
+
+model FoodEquivalent {
+  id                  String       @id @default(uuid())
+  category            String       // CEREALES, VERDURAS, FRUTAS, LEGUMINOSAS, POA_MAGRO, etc.
+  name                String       // Alimento
+  servingSize         String       // Cantidad sugerida
+  caloriesKcal        Float
+  proteinG            Float
+  carbsG              Float
+  fatG                Float
+}
+
+// 🇵🇪 TABLA PERUANA DE COMPOSICIÓN DE ALIMENTOS (TPCA 2017 - CENAN / INS)
+model PeruvianFood {
+  id                  String       @id @default(uuid())
+  code                String       // ej. A-1, B-12, F-45
+  groupCode           String       // A, B, C, D, E, F, G, H, J, K, L, Q, T, U
+  groupName           String       // Cereales y derivados, Verduras, etc.
+  name                String       // Nombre oficial del alimento peruano
+  energyKcal          Float        // Energía en 100g de parte comestible
+  energyKj            Float?
+  waterG              Float?       // Humedad (g)
+  proteinG            Float        // Proteína total (g)
+  fatG                Float        // Grasa total (g)
+  carbsG              Float        // Carbohidratos disponibles (g)
+  fiberG              Float?       // Fibra dietaria (g)
+  ashG                Float?       // Cenizas (g)
+  calciumMg           Float?       // Calcio (mg)
+  phosphorusMg        Float?       // Fósforo (mg)
+  zincMg              Float?       // Zinc (mg)
+  ironMg              Float?       // Hierro total (mg)
+  vitaminAUg          Float?       // Vitamina A (ug)
+  thiamineMg          Float?       // Tiamina B1 (mg)
+  riboflavinMg        Float?       // Riboflavina B2 (mg)
+  niacinMg            Float?       // Niacina B3 (mg)
+  vitaminCMg          Float?       // Vitamina C (mg)
+  folicAcidUg         Float?       // Ácido fólico (ug)
+  sodiumMg            Float?       // Sodio (mg)
+  potassiumMg         Float?       // Potasio (mg)
+}
+
+// 🇵🇪 TABLA AUXILIAR PARA LA FORMULACIÓN Y EVALUACIÓN DE REGÍMENES ALIMENTARIOS (TAFERA 2016 VF)
+model TaferaFoodPortion {
+  id                  String       @id @default(uuid())
+  code                String       // Código TAFERA (ej. 1-1, 1-17, 6-5, 12-8)
+  groupNumber         Int          // 1 al 12
+  groupName           String       // Nombre del grupo de alimentos
+  foodName            String       // Nombre del alimento
+  householdMeasure    String       // Unidad de consumo / Medida casera
+  grossWeightG        Float?       // Peso bruto (g)
+  netWeightG          Float        // Peso neto (g)
+  ediblePercentage    Float?       // % Parte comestible
+  energyKcal          Float        // Energía (kcal)
+  proteinG            Float        // Proteínas (g)
+  fatG                Float        // Grasa total (g)
+  carbsG              Float        // Carbohidratos disponibles (g)
+  fiberG              Float?       // Fibra dietaria (g)
+  calciumMg           Float?       // Calcio (mg)
+  zincMg              Float?       // Zinc (mg)
+  ironMg              Float?       // Hierro (mg)
+  vitaminAUg          Float?       // Vitamina A (ug)
+  vitaminCMg          Float?       // Vitamina C (mg)
+}
+
+// 🇵🇪 FACTORES DE CONVERSIÓN DE ALIMENTOS COCIDOS A CRUDOS (TAFERA MÓDULO II)
+model TaferaConversionFactor {
+  id                  String       @id @default(uuid())
+  groupName           String       // Cereales, Verduras, Carnes, etc.
+  foodName            String       // Alimento
+  cookingType         String       // Sancochado, Frito, Horneado, etc.
+  factor              Float        // Factor de conversión FC (Peso cocido / Peso crudo)
+}
