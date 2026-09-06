@@ -10,7 +10,9 @@ import {
   Activity,
   HeartPulse,
   Calendar,
+  CalendarDays,
   FileText,
+  ChefHat,
 } from "lucide-react";
 import PwaRegister from "@/components/pwa/PwaRegister";
 
@@ -52,6 +54,13 @@ export default function RootLayout({
                 Panel Principal
               </Link>
               <Link
+                href="/citas"
+                className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-700 hover:bg-emerald-50 hover:text-emerald-700 font-medium text-sm transition-colors"
+              >
+                <Calendar className="w-4 h-4 text-slate-500" />
+                Agenda y Citas
+              </Link>
+              <Link
                 href="/pacientes"
                 className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-700 hover:bg-emerald-50 hover:text-emerald-700 font-medium text-sm transition-colors"
               >
@@ -71,6 +80,27 @@ export default function RootLayout({
               >
                 <Apple className="w-4 h-4 text-slate-500" />
                 Alimentos y Equivalentes
+              </Link>
+              <Link
+                href="/recetas"
+                className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-700 hover:bg-emerald-50 hover:text-emerald-700 font-medium text-sm transition-colors"
+              >
+                <ChefHat className="w-4 h-4 text-slate-500" />
+                Recetario Peruano
+              </Link>
+              <Link
+                href="/planificador"
+                className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-700 hover:bg-emerald-50 hover:text-emerald-700 font-medium text-sm transition-colors"
+              >
+                <CalendarDays className="w-4 h-4 text-slate-500" />
+                Planificador Semanal
+              </Link>
+              <Link
+                href="/suplementos"
+                className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-700 hover:bg-emerald-50 hover:text-emerald-700 font-medium text-sm transition-colors"
+              >
+                <Activity className="w-4 h-4 text-slate-500" />
+                Soporte & Vademécum
               </Link>
             </nav>
           </div>

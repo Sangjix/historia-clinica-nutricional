@@ -15,6 +15,10 @@ echo "🗄️ Actualizando esquema de base de datos..."
 npx prisma generate
 npx prisma db push
 
+echo "🌱 Asegurando recetas clínicas peruanas y vademécum..."
+npx tsx prisma/seed-v1-1.ts || true
+npx tsx prisma/seed-recipes.ts || true
+
 echo "🏗️ Compilando nueva versión de Next.js..."
 npm run build
 

@@ -17,8 +17,11 @@ import {
   TrendingUp,
   AlertCircle,
   Stethoscope,
+  ShieldCheck,
+  Zap,
 } from "lucide-react";
 import { calculateAge, formatDate } from "@/lib/utils";
+import { evaluatePediatricWho } from "@/lib/formulas/pediatric-who";
 import EvolutionChart from "@/components/charts/EvolutionChart";
 import NewConsultationModal from "./NewConsultationModal";
 import EditConsultationModal from "./EditConsultationModal";
@@ -60,6 +63,16 @@ export default async function PatientPage({ params }: PatientPageProps) {
   const latestAnthropo = latestConsultation?.anthropometry;
   const activeDiet = patient.consultations.find((c) => c.dietPlan)?.dietPlan;
 
+  const pediatricResult =
+    age < 18 && latestAnthropo?.weightKg && latestAnthropo?.heightCm
+      ? evaluatePediatricWho({
+          ageMonths: age * 12,
+          gender: patient.gender as any,
+          weightKg: latestAnthropo.weightKg,
+          heightCm: latestAnthropo.heightCm,
+        })
+      : null;
+
   // Preparar datos ordenados cronológicamente para la gráfica evolutiva
   const chartData = [...patient.consultations]
     .reverse()
@@ -99,6 +112,14 @@ export default async function PatientPage({ params }: PatientPageProps) {
         </div>
 
         <div className="flex items-center gap-2">
+          <Link
+            href={`/pacientes/${patient.id}/reporte`}
+            className="flex items-center gap-1.5 px-3 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-semibold rounded-xl border border-indigo-200 shadow-xs transition"
+            title="Generar Informe Ejecutivo de Evolución (PDF / Imprimir)"
+          >
+            <FileText className="w-4 h-4" />
+            Reporte PDF
+          </Link>
           <SendSurveyModal
             patientId={patient.id}
             patientName={`${patient.firstName} ${patient.lastName}`}
@@ -240,6 +261,53 @@ export default async function PatientPage({ params }: PatientPageProps) {
             {latestAnthropo.waistHipRatio && (
               <p className="text-xs text-slate-400 mt-1">ICC: {latestAnthropo.waistHipRatio}</p>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* 👶 Evaluación Pediátrica OMS (si tiene < 18 años) */}
+      {pediatricResult && (
+        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 p-5 rounded-2xl shadow-xs space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-bold text-blue-900 flex items-center gap-2">
+              <ShieldCheck className="w-5 h-5 text-blue-700" />
+              Evaluación Nutricional Pediátrica Oficial (Estándares OMS)
+            </h3>
+            <span className="text-xs font-semibold px-2.5 py-1 bg-white text-blue-800 rounded-full border border-blue-200">
+              Edad: {age} años
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="bg-white p-3.5 rounded-xl border border-blue-100">
+              <span className="text-xs text-gray-500 block font-medium">Talla para la Edad (T/E)</span>
+              <span className="text-lg font-black text-gray-900 block mt-0.5">
+                Z = {pediatricResult.zScoreHeightForAge > 0 ? `+${pediatricResult.zScoreHeightForAge}` : pediatricResult.zScoreHeightForAge} DE
+              </span>
+              <span className="text-xs font-semibold text-blue-700 block mt-1">
+                {pediatricResult.stuntingClassification}
+              </span>
+            </div>
+
+            <div className="bg-white p-3.5 rounded-xl border border-blue-100">
+              <span className="text-xs text-gray-500 block font-medium">IMC para la Edad (IMC/E)</span>
+              <span className="text-lg font-black text-gray-900 block mt-0.5">
+                Z = {pediatricResult.zScoreBmiForAge > 0 ? `+${pediatricResult.zScoreBmiForAge}` : pediatricResult.zScoreBmiForAge} DE
+              </span>
+              <span className="text-xs font-semibold text-blue-700 block mt-1">
+                {pediatricResult.bmiClassification} (P{pediatricResult.percentileBmi})
+              </span>
+            </div>
+
+            <div className="bg-white p-3.5 rounded-xl border border-blue-100">
+              <span className="text-xs text-gray-500 block font-medium">Peso para la Edad (P/E)</span>
+              <span className="text-lg font-black text-gray-900 block mt-0.5">
+                Z = {pediatricResult.zScoreWeightForAge > 0 ? `+${pediatricResult.zScoreWeightForAge}` : pediatricResult.zScoreWeightForAge} DE
+              </span>
+              <span className="text-xs font-semibold text-blue-700 block mt-1">
+                {pediatricResult.wastingClassification}
+              </span>
+            </div>
           </div>
         </div>
       )}

@@ -7,6 +7,67 @@ datasource db {
   url      = "file:./dev.db"
 }
 
+// 🔐 USUARIOS, AUTENTICACIÓN Y ROLES (RBAC)
+model User {
+  id              String         @id @default(uuid())
+  email           String         @unique
+  name            String
+  passwordHash    String
+  role            String         @default("NUTRITIONIST") // ADMIN | NUTRITIONIST | ASSISTANT
+  phone           String?
+  isActive        Boolean        @default(true)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  appointments    Appointment[]
+}
+
+// 📜 AUDITORÍA MÉDICO-LEGAL (TRAZABILIDAD INMUTABLE)
+model MedicalAuditLog {
+  id              String         @id @default(uuid())
+  userId          String
+  entity          String         // Patient | Consultation | AnthropometryRecord | DietPlan
+  entityId        String
+  action          String         // CREATE | UPDATE | DELETE
+  diffJson        String?        // Cambios registrados en formato JSON { before, after }
+  ipAddress       String?
+  timestamp       DateTime       @default(now())
+}
+
+// 🏥 CONSULTORIOS / BOXES FÍSICOS
+model ConsultationRoom {
+  id              String         @id @default(uuid())
+  name            String         // ej. "Box 1 - Antropometría & BIA", "Box 2 - Consulta"
+  description     String?
+  isActive        Boolean        @default(true)
+  createdAt       DateTime       @default(now())
+
+  appointments    Appointment[]
+}
+
+// 📅 AGENDA, CITAS Y GESTIÓN DE AUSENTISMO
+model Appointment {
+  id                  String            @id @default(uuid())
+  patientId           String
+  userId              String?           // Nutricionista asignado
+  roomId              String?           // Box asignado
+  date                DateTime
+  durationMinutes     Int               @default(30) // 15, 30, 45, 60
+  type                String            @default("FOLLOW_UP") // FIRST_VISIT | FOLLOW_UP | BIA_EVALUATION | CLINICAL_SUPPORT
+  status              String            @default("SCHEDULED") // SCHEDULED | CONFIRMED | ATTENDED | CANCELLED | NO_SHOW
+  notes               String?
+  cancellationReason  String?
+  reminderSentAt      DateTime?
+  whatsappConfirmedAt DateTime?
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+
+  patient             Patient           @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  nutritionist        User?             @relation(fields: [userId], references: [id])
+  room                ConsultationRoom? @relation(fields: [roomId], references: [id])
+}
+
+// 👤 PACIENTE
 model Patient {
   id              String         @id @default(uuid())
   recordNumber    String         @unique // Folio / Expediente clínico
@@ -25,8 +86,12 @@ model Patient {
 
   consultations   Consultation[]
   preferenceSurvey PatientPreferenceSurvey?
+  appointments    Appointment[]
+  enteralOrders   EnteralNutritionOrder[]
+  mealPlans       WeeklyMealPlan[]
 }
 
+// 📋 ENCUESTA DE GUSTOS, PREFERENCIAS Y HÁBITOS (CON MATRIZ LIKERT)
 model PatientPreferenceSurvey {
   id                String    @id @default(uuid())
   patientId         String    @unique
@@ -43,12 +108,16 @@ model PatientPreferenceSurvey {
   favoriteFoods     String?   // Alimentos favoritos / indispensables
   dislikedFoods     String?   // Alimentos que rechaza o no consume
   dietType          String?   // OMNIVORE | VEGETARIAN | VEGAN | PESCETARIAN | OTHER
+  likertMatrixJson  String?   // Matriz estructurada: [{ foodName, group, rating: 'LOVE'|'LIKE'|'NEUTRAL'|'DISLIKE'|'HATE' }]
 
   // Bloque 3: Hábitos y Logística
   cookingHabits     String?   // Quién cocina, tiempo disponible
   diningOut         String?   // Frecuencia de comer fuera
   waterIntake       String?   // Vasos o litros al día
   physicalActivity  String?   // Nivel de actividad física
+  weeklyBudget      String?   // Presupuesto estimado semanal para alimentación
+  cookingTimeDaily  String?   // Minutos/horas disponibles para cocinar
+  preferredMarkets  String?   // Supermercados, mercados zonales, ferias
 
   // Bloque 4: Horarios
   breakfastTime     String?
@@ -66,7 +135,7 @@ model PatientPreferenceSurvey {
   patient           Patient   @relation(fields: [patientId], references: [id], onDelete: Cascade)
 }
 
-
+// 🩺 CONSULTA CLÍNICA Y NOTAS DE EVOLUCIÓN
 model Consultation {
   id                      String              @id @default(uuid())
   patientId               String
@@ -76,6 +145,24 @@ model Consultation {
   nutritionalDiagnosisPES String?             // Problema, Etiología, Signos y Síntomas
   clinicalEvolutionNotes  String?
   nextAppointmentDate     DateTime?
+
+  // Signos Vitales (C)
+  systolicBp              Int?                // Presión Arterial Sistólica (mmHg)
+  diastolicBp             Int?                // Presión Arterial Diastólica (mmHg)
+  heartRateBpm            Int?                // Frecuencia Cardiaca (lpm)
+  giSymptomsJson          String?             // Sintomatología Gastrointestinal (reflujo, distensión, etc.)
+  drugNutrientInteractionsJson String?        // Farmacoterapia e interacciones
+
+  // Estilo de Vida y Estrés (E)
+  perceivedStressScore    Int?                // 1 a 10
+  sleepHoursPerNight      Float?
+  sleepQuality            String?             // BUENA | REGULAR | MALA
+
+  // Alerta de Síndrome de Realimentación
+  refeedingRiskLevel      String?             // BAJO | MODERADO | ALTO | MUY_ALTO
+  refeedingCriteriaJson   String?
+  refeedingStartingKcalKgDay Float?
+
   createdAt               DateTime            @default(now())
   updatedAt               DateTime            @updatedAt
 
@@ -84,52 +171,155 @@ model Consultation {
   anamnesis               AnamnesisRecord?
   biochemical             BiochemicalRecord?
   dietPlan                DietPlan?
+  enteralOrder            EnteralNutritionOrder?
 }
 
+// 📏 ANTROPOMETRÍA, BIOIMPEDANCIA (BIA) Y FUNCIONALIDAD (A + F)
 model AnthropometryRecord {
-  id                  String       @id @default(uuid())
-  consultationId      String       @unique
-  date                DateTime     @default(now())
-  weightKg            Float
-  heightCm            Float
-  bmi                 Float
-  bmiClassification   String
-  idealWeightKg       Float?
+  id                      String       @id @default(uuid())
+  consultationId          String       @unique
+  date                    DateTime     @default(now())
+  weightKg                Float
+  heightCm                Float
+  bmi                     Float
+  bmiClassification       String
+  idealWeightKg           Float?
 
   // Circunferencias (cm)
-  waistCm             Float?
-  hipCm               Float?
-  armCm               Float?
-  calfCm              Float?
-  waistHipRatio       Float?
-  waistHeightRatio    Float?
+  waistCm                 Float?
+  hipCm                   Float?
+  armCm                   Float?
+  calfCm                  Float?
+  waistHipRatio           Float?
+  waistHeightRatio        Float?
 
   // Pliegues cutáneos (mm)
-  tricepsFoldMm       Float?
-  subscapularFoldMm   Float?
-  bicepsFoldMm        Float?
-  suprailiacFoldMm    Float?
-  abdominalFoldMm     Float?
-  thighFoldMm         Float?
-  calfFoldMm          Float?
+  tricepsFoldMm           Float?
+  subscapularFoldMm       Float?
+  bicepsFoldMm            Float?
+  suprailiacFoldMm        Float?
+  abdominalFoldMm         Float?
+  thighFoldMm             Float?
+  calfFoldMm              Float?
 
   // Composición corporal calculada
-  bodyFatPercentage   Float?
-  fatMassKg           Float?
-  leanMassKg          Float?
-  muscleMassKg        Float?
+  bodyFatPercentage       Float?
+  fatMassKg               Float?
+  leanMassKg              Float?
+  muscleMassKg            Float?
 
-  // Bioimpedancia (opcional)
-  visceralFatLevel    Float?
-  waterPercentage     Float?
+  // Funcionalidad Muscular (F)
+  handgripStrengthKg      Float?       // Dinamometría de prensión manual (kg)
 
-  // Somatotipo
-  endomorphy          Float?
-  mesomorphy          Float?
-  ectomorphy          Float?
-  somatotypeClass     String?
+  // Bioimpedancia Avanzada (BIA) (F)
+  visceralFatLevel        Float?
+  waterPercentage         Float?
+  skeletalMuscleMassKg    Float?       // SMM (Masa muscular esquelética)
+  skeletalMuscleIndex     Float?       // SMI (kg/m²)
+  totalBodyWaterLiters    Float?       // TBW
+  intracellularWaterLiters Float?      // ICW
+  extracellularWaterLiters Float?      // ECW
+  ecwTbwRatio             Float?       // Índice de edema (ECW/TBW)
+  boneMineralContentKg    Float?       // Masa ósea (BMC)
+  phaseAngleDegrees       Float?       // Ángulo de fase α a 50 kHz
+  segmentalFatJson        String?      // Grasa segmentaria (brazo der/izq, pierna der/izq, tronco)
+  segmentalMuscleJson     String?      // Músculo segmentario
 
-  consultation        Consultation @relation(fields: [consultationId], references: [id], onDelete: Cascade)
+  // Somatotipo Heath-Carter
+  endomorphy              Float?
+  mesomorphy              Float?
+  ectomorphy              Float?
+  somatotypeClass         String?
+
+  // Evaluación Pediátrica OMS (Z-Scores)
+  whoZScoreWeightAge      Float?
+  whoZScoreHeightAge      Float?
+  whoZScoreBmiAge         Float?
+  whoPercentileBmi        Float?
+  whoClassification       String?
+
+  consultation            Consultation @relation(fields: [consultationId], references: [id], onDelete: Cascade)
+}
+
+// 🧪 BIOQUÍMICA Y PERFIL FÉRRICO (B)
+model BiochemicalRecord {
+  id                      String       @id @default(uuid())
+  consultationId          String       @unique
+  date                    DateTime     @default(now())
+  fastingGlucose          Float?
+  glycatedHbA1c           Float?
+  totalCholesterol        Float?
+  hdlCholesterol          Float?
+  ldlCholesterol          Float?
+  triglycerides           Float?
+  uricAcid                Float?
+  creatinine              Float?
+  hemoglobin              Float?
+  alt                     Float?
+  ast                     Float?
+
+  // Perfil Férrico Completo (Anemia / Hierro)
+  ferritinNgMl            Float?       // Ferritina sérica (ng/mL)
+  transferrinMgDl         Float?       // Transferrina (mg/dL)
+  serumIronUgDl           Float?       // Sideremia / Hierro sérico (µg/dL)
+  ironSaturationPercentage Float?      // Saturación de transferrina (%)
+
+  alertsSummaryJson       String?      // Semáforo de analíticas fuera de rango
+  clinicalNotes           String?
+
+  consultation            Consultation @relation(fields: [consultationId], references: [id], onDelete: Cascade)
+}
+
+// 💊 VADEMÉCUM DE SUPLEMENTOS Y FÓRMULAS CLÍNICAS
+model ClinicalSupplement {
+  id                      String       @id @default(uuid())
+  code                    String       @unique // ej. "SUP-01", "ENS-ADV"
+  name                    String       // ej. "Ensure Advance Líquido", "Glucerna 1.5", "Whey Protein 90%"
+  brand                   String?      // ej. "Abbott", "Nestlé Health Science", "Fresenius Kabi"
+  category                String       // ENTERAL_STANDARD | ENTERAL_SPECIALIZED | PROTEIN_MODULE | CARB_MODULE | LIPID_MODULE | MICRONUTRIENT
+  presentation            String       // LIQUIDO | POLVO
+  servingSize             String       // ej. "237 ml", "1 medida (25g)"
+  kcalPer100gOrMl         Float
+  proteinGPer100          Float
+  carbsGPer100            Float
+  fatGPer100              Float
+  fiberGPer100            Float?
+  osmolarityMOsmL         Float?       // Osmolaridad (mOsm/L)
+  sodiumMgPer100          Float?
+  potassiumMgPer100       Float?
+  phosphorusMgPer100      Float?
+  calciumMgPer100         Float?
+  indications             String?
+  contraindications       String?
+  administrationRoute     String       @default("ORAL") // ORAL | ENTERAL_TUBE | BOTH
+
+  enteralOrders           EnteralNutritionOrder[]
+}
+
+// 🥣 ORDEN DE NUTRICIÓN ENTERAL / SOPORTE ESPECIALIZADO
+model EnteralNutritionOrder {
+  id                      String       @id @default(uuid())
+  consultationId          String       @unique
+  patientId               String
+  supplementId            String
+  infusionRoute           String       // ORAL | SONDA_NASOGASTRICA | SONDA_NASOYEYUNAL | OSTOMIA_GASTROSTOMIA | OSTOMIA_YEYUNOSTOMIA
+  infusionMethod          String       // BOLOS | GRAVEDAD_CONTINUA | BOMBA_INFUSION_CONTINUA
+  totalDailyVolumeMl      Float
+  targetKcal              Float
+  targetProteinG          Float
+  startRateMlPerHour      Float?       // Velocidad de inicio (ej. 20 ml/h)
+  targetRateMlPerHour     Float?       // Velocidad meta (ej. 60 ml/h)
+  progressionStepsJson    String?      // Pauta de progresión
+  gastricResidualLimitMl  Float?       @default(200)
+  waterFlushesMlPerDay    Float?
+  instructions            String?
+  status                  String       @default("ACTIVE") // ACTIVE | DISCONTINUED | COMPLETED
+  createdAt               DateTime     @default(now())
+  updatedAt               DateTime     @updatedAt
+
+  consultation            Consultation @relation(fields: [consultationId], references: [id], onDelete: Cascade)
+  patient                 Patient      @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  supplement              ClinicalSupplement @relation(fields: [supplementId], references: [id])
 }
 
 model AnamnesisRecord {
@@ -140,26 +330,6 @@ model AnamnesisRecord {
   allergiesJson       String?
   lifestyleJson       String?
   foodRecall24hJson   String?
-
-  consultation        Consultation @relation(fields: [consultationId], references: [id], onDelete: Cascade)
-}
-
-model BiochemicalRecord {
-  id                  String       @id @default(uuid())
-  consultationId      String       @unique
-  date                DateTime     @default(now())
-  fastingGlucose      Float?
-  glycatedHbA1c       Float?
-  totalCholesterol    Float?
-  hdlCholesterol      Float?
-  ldlCholesterol      Float?
-  triglycerides       Float?
-  uricAcid            Float?
-  creatinine          Float?
-  hemoglobin          Float?
-  alt                 Float?
-  ast                 Float?
-  clinicalNotes       String?
 
   consultation        Consultation @relation(fields: [consultationId], references: [id], onDelete: Cascade)
 }
@@ -184,9 +354,9 @@ model DietPlan {
 
 model FoodEquivalent {
   id                  String       @id @default(uuid())
-  category            String       // CEREALES, VERDURAS, FRUTAS, LEGUMINOSAS, POA_MAGRO, etc.
-  name                String       // Alimento
-  servingSize         String       // Cantidad sugerida
+  category            String
+  name                String
+  servingSize         String
   caloriesKcal        Float
   proteinG            Float
   carbsG              Float
@@ -196,60 +366,159 @@ model FoodEquivalent {
 // 🇵🇪 TABLA PERUANA DE COMPOSICIÓN DE ALIMENTOS (TPCA 2017 - CENAN / INS)
 model PeruvianFood {
   id                  String       @id @default(uuid())
-  code                String       // ej. A-1, B-12, F-45
-  groupCode           String       // A, B, C, D, E, F, G, H, J, K, L, Q, T, U
-  groupName           String       // Cereales y derivados, Verduras, etc.
-  name                String       // Nombre oficial del alimento peruano
-  energyKcal          Float        // Energía en 100g de parte comestible
+  code                String
+  groupCode           String
+  groupName           String
+  name                String
+  energyKcal          Float
   energyKj            Float?
-  waterG              Float?       // Humedad (g)
-  proteinG            Float        // Proteína total (g)
-  fatG                Float        // Grasa total (g)
-  carbsG              Float        // Carbohidratos disponibles (g)
-  fiberG              Float?       // Fibra dietaria (g)
-  ashG                Float?       // Cenizas (g)
-  calciumMg           Float?       // Calcio (mg)
-  phosphorusMg        Float?       // Fósforo (mg)
-  zincMg              Float?       // Zinc (mg)
-  ironMg              Float?       // Hierro total (mg)
-  vitaminAUg          Float?       // Vitamina A (ug)
-  thiamineMg          Float?       // Tiamina B1 (mg)
-  riboflavinMg        Float?       // Riboflavina B2 (mg)
-  niacinMg            Float?       // Niacina B3 (mg)
-  vitaminCMg          Float?       // Vitamina C (mg)
-  folicAcidUg         Float?       // Ácido fólico (ug)
-  sodiumMg            Float?       // Sodio (mg)
-  potassiumMg         Float?       // Potasio (mg)
+  waterG              Float?
+  proteinG            Float
+  fatG                Float
+  carbsG              Float
+  fiberG              Float?
+  ashG                Float?
+  calciumMg           Float?
+  phosphorusMg        Float?
+  zincMg              Float?
+  ironMg              Float?
+  vitaminAUg          Float?
+  thiamineMg          Float?
+  riboflavinMg        Float?
+  niacinMg            Float?
+  vitaminCMg          Float?
+  folicAcidUg         Float?
+  sodiumMg            Float?
+  potassiumMg         Float?
 }
 
 // 🇵🇪 TABLA AUXILIAR PARA LA FORMULACIÓN Y EVALUACIÓN DE REGÍMENES ALIMENTARIOS (TAFERA 2016 VF)
 model TaferaFoodPortion {
   id                  String       @id @default(uuid())
-  code                String       // Código TAFERA (ej. 1-1, 1-17, 6-5, 12-8)
-  groupNumber         Int          // 1 al 12
-  groupName           String       // Nombre del grupo de alimentos
-  foodName            String       // Nombre del alimento
-  householdMeasure    String       // Unidad de consumo / Medida casera
-  grossWeightG        Float?       // Peso bruto (g)
-  netWeightG          Float        // Peso neto (g)
-  ediblePercentage    Float?       // % Parte comestible
-  energyKcal          Float        // Energía (kcal)
-  proteinG            Float        // Proteínas (g)
-  fatG                Float        // Grasa total (g)
-  carbsG              Float        // Carbohidratos disponibles (g)
-  fiberG              Float?       // Fibra dietaria (g)
-  calciumMg           Float?       // Calcio (mg)
-  zincMg              Float?       // Zinc (mg)
-  ironMg              Float?       // Hierro (mg)
-  vitaminAUg          Float?       // Vitamina A (ug)
-  vitaminCMg          Float?       // Vitamina C (mg)
+  code                String
+  groupNumber         Int
+  groupName           String
+  foodName            String
+  householdMeasure    String
+  grossWeightG        Float?
+  netWeightG          Float
+  ediblePercentage    Float?
+  energyKcal          Float
+  proteinG            Float
+  fatG                Float
+  carbsG              Float
+  fiberG              Float?
+  calciumMg           Float?
+  zincMg              Float?
+  ironMg              Float?
+  vitaminAUg          Float?
+  vitaminCMg          Float?
 }
 
 // 🇵🇪 FACTORES DE CONVERSIÓN DE ALIMENTOS COCIDOS A CRUDOS (TAFERA MÓDULO II)
 model TaferaConversionFactor {
   id                  String       @id @default(uuid())
-  groupName           String       // Cereales, Verduras, Carnes, etc.
-  foodName            String       // Alimento
-  cookingType         String       // Sancochado, Frito, Horneado, etc.
-  factor              Float        // Factor de conversión FC (Peso cocido / Peso crudo)
+  groupName           String
+  foodName            String
+  cookingType         String
+  factor              Float
+}
+
+// 🍲 RECETARIO CLÍNICO ESTANDARIZADO (TPCA / CENAN / INS)
+model Recipe {
+  id                  String             @id @default(uuid())
+  code                String             @unique // ej. "REC-PER-01"
+  name                String             // ej. "Ají de Pollo Saludable con Quinua"
+  category            String             // DESAYUNO | ALMUERZO | CENA | MEDIA_MANANA | MEDIA_TARDE
+  description         String?
+  prepTimeMinutes     Int                @default(25)
+  servings            Int                @default(1)
+  difficulty          String             @default("FACIL") // FACIL | MEDIA | ALTA
+  tags                String?            // "ANTIANEMICO, CARDIOPROTECTOR, DIABETES, HIPERPROTEICO"
+  instructionsJson    String?            // Pasos de preparación en JSON
+  imageUrl            String?
+  
+  // Totales nutricionales por porción
+  totalKcal           Float
+  totalProteinG       Float
+  totalFatG           Float
+  totalCarbsG         Float
+  totalFiberG         Float?             @default(0)
+  totalIronMg         Float?             @default(0)
+  totalZincMg         Float?             @default(0)
+  totalCalciumMg      Float?             @default(0)
+  totalSodiumMg       Float?             @default(0)
+
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+
+  ingredients         RecipeIngredient[]
+  mealPlanSlots       MealPlanSlot[]
+}
+
+// 🥗 INGREDIENTES DESGLOSADOS DE LA RECETA
+model RecipeIngredient {
+  id                  String             @id @default(uuid())
+  recipeId            String
+  peruvianFoodCode    String?            // Código de la TPCA (ej. "A12")
+  foodName            String             // Nombre del ingrediente
+  category            String             // PROTEINA | CEREAL | TUBERCULO | VERDURA | FRUTA | GRASA | CONDIMENTO
+  grossWeightG        Float?             // Peso bruto (g)
+  netWeightG          Float              // Peso neto (g)
+  householdMeasure    String             // ej. "120g", "1 taza", "1 cdta"
+  
+  // Aporte nutricional individual de este ingrediente
+  energyKcal          Float
+  proteinG            Float
+  fatG                Float
+  carbsG              Float
+  fiberG              Float?             @default(0)
+  ironMg              Float?             @default(0)
+  sodiumMg            Float?             @default(0)
+  notes               String?
+
+  recipe              Recipe             @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+}
+
+// 📅 PLAN SEMANAL DE ALIMENTACIÓN
+model WeeklyMealPlan {
+  id                  String             @id @default(uuid())
+  patientId           String?
+  title               String             // ej. "Plan Semanal Hipocalórico e Hiperproteico"
+  startDate           DateTime?
+  endDate             DateTime?
+  targetKcal          Float              @default(2000)
+  targetProteinG      Float              @default(120)
+  targetCarbsG        Float              @default(200)
+  targetFatG          Float              @default(55)
+  notes               String?
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+
+  patient             Patient?           @relation(fields: [patientId], references: [id], onDelete: SetNull)
+  slots               MealPlanSlot[]
+}
+
+// 🍽️ SLOTS DEL PLANIFICADOR SEMANAL (LUNES A DOMINGO X TIEMPOS DE COMIDA)
+model MealPlanSlot {
+  id                  String             @id @default(uuid())
+  mealPlanId          String
+  dayOfWeek           Int                // 0: Lunes, 1: Martes, ..., 6: Domingo
+  mealTime            String             // DESAYUNO | MEDIA_MANANA | ALMUERZO | MEDIA_TARDE | CENA
+  recipeId            String?            // Receta maestra asignada (si aplica)
+  customTitle         String             // Título visual de la comida
+  isExploded          Boolean            @default(false) // Si fue desglosado en ingredientes independientes
+  
+  // JSON con los ingredientes actuales (permite modificar gramos, quitar o agregar)
+  ingredientsJson     String?
+
+  // Totales calculados en tiempo real para este slot
+  totalKcal           Float              @default(0)
+  totalProteinG       Float              @default(0)
+  totalFatG           Float              @default(0)
+  totalCarbsG         Float              @default(0)
+  totalIronMg         Float              @default(0)
+
+  mealPlan            WeeklyMealPlan     @relation(fields: [mealPlanId], references: [id], onDelete: Cascade)
+  recipe              Recipe?            @relation(fields: [recipeId], references: [id], onDelete: SetNull)
 }

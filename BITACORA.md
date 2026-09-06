@@ -6,7 +6,7 @@
 - **Proyecto:** Software Profesional de Registro y Gestión de Historia Clínica Nutricional.
 - **Objetivo:** Brindar a profesionales de la nutrición (nutriólogos, dietistas, clínicas nutricionales) una plataforma moderna, segura, ágil y visual para el registro clínico, evaluación antropométrica, cálculo dietético, prescripción de planes de alimentación y seguimiento de pacientes.
 - **Fecha de Inicio:** 2026-09-04
-- **Estado Actual:** **Fase 4 Completada - Formulario de Preferencias Alimentarias (WhatsApp/Email), Visor de TAFERA 2016 VF, PWA Offline y Standalone Ultra-Ligero.**
+- **Estado Actual:** **Fase 5 Completada - Sistema Desplegado en Producción en Google Cloud (Always Free) con Dominio Seguro HTTPS y SSL Oficial (https://nutrirecord.duckdns.org).**
 
 ---
 
@@ -108,6 +108,16 @@ El sistema implementa la metodología clínica estandarizada del **Proceso de At
   - Service Worker en `public/sw.js` con estrategia network-first y caché de contingencia para funcionamiento sin internet en consultorios.
   - Manifiesto PWA en `src/app/manifest.ts` y componente de registro `PwaRegister.tsx` en `layout.tsx` para permitir instalación en Windows, tablets o smartphones.
 - **Verificación:** 8/8 tests unitarios pasando, compilación `next build` limpia con 0 errores y servidor de desarrollo activo en `http://localhost:3000`.
+
+### [2026-09-05] - Fase 5: Despliegue en Producción en Google Cloud (Always Free) y Dominio Seguro HTTPS
+- **Infraestructura Cloud:**
+  - Creación y encendido de máquina virtual `nutriclinic-server` en Google Compute Engine (`e2-micro`, 1 GB RAM, 30 GB SSD persistente, región `us-central1-a`, IP Externa `136.114.156.160`).
+  - Configuración de cortafuegos de red para tráfico HTTP (puerto 80) y HTTPS (puerto 443).
+  - Puesta en marcha automatizada con `setup-server.sh` configurando 2 GB de memoria Swap, Node.js 20 LTS, Nginx como proxy inverso y PM2 como gestor de procesos 24/7.
+- **Dominio Seguro y Certificado SSL:**
+  - Registro de subdominio dinámico `nutrirecord.duckdns.org` vinculado a la IP estática del servidor.
+  - Generación e instalación de certificado de seguridad oficial Let's Encrypt mediante Certbot con redirección automática HTTP -> HTTPS y renovación automática en segundo plano.
+  - URL de acceso en vivo para pacientes y profesionales: **`https://nutrirecord.duckdns.org`**.
 
 ---
 

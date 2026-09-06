@@ -18,6 +18,7 @@
 .DS_Store
 *.pem
 Thumbs.db
+*.zip
 
 # debug
 npm-debug.log*
